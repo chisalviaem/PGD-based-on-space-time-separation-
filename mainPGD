@@ -1,0 +1,66 @@
+clear all
+close all
+clc
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%parameters%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+global beta alpha
+beta=1;
+alpha=1;
+TOL=1e-5;
+num_max_iter=25;
+total_t=10;
+delta_t=0.01;
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%geometry%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ X0=0;Xf=2;Y0=0;Yf=1;
+ tamx=0.1;tamy=0.1;
+ nenY=numel(Y0:tamy:Yf);
+ [X,Y]=meshgrid(X0:tamx:Xf,Y0:tamy:Yf);
+ coords=[X(:),Y(:)];%2D coordination
+ force=X0:tamx:Xf;
+ force=force';
+ triangles=delaunayTriangulation(coords(:,1),coords(:,2));
+ K1=stiff2D(triangles.Points,triangles.ConnectivityList);
+ M1=bc2D(triangles.Points,triangles.ConnectivityList);
+
+
+nodes2=[[1:1:total_t/delta_t]' [2:1:total_t/delta_t+1]'];
+gcoord2=[[0:delta_t:total_t];zeros(1,total_t/delta_t+1)]';
+C=td(total_t,delta_t);
+M2=bc1D(gcoord2,nodes2);
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%source%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+V=cell(2,1);
+Ch{1,1}=@(x,y) cos(2*pi*x).*sin(2*pi*y);
+Ch{2,1}=@(t) sin(t);
+V{1}(:,1)=Ch{1,1}(coords(:,1),coords(:,2));
+V{1}=M1*V{1};
+V{2}(:,1)=Ch{2,1}(gcoord2(:,1));
+V{2}=M2*V{2};%continuity
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%node without boundary condition%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+b1=[1:11];b3=[1:11:221];
+b2=[221:231];b4=[11:11:231];b=[b1 b2 b4 b3];
+CC{1}=setxor([b1 b2 b3 b4],[1:length(coords)])';
+CC{2}=2:length(C);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%P G D%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ num_iter=0;iter=zeros(1); Aprt=0; Error_iter=1; 
+ F=zeros(length(K1),1);
+ G=zeros(length(C),1);
+ while Error_iter>TOL && num_iter<num_max_iter
+    num_iter=num_iter+1;
+    R0=zeros(length(K1),1);
+    S0=zeros(length(C),1);
+    S0(1:total_t/delta_t+1)=0:delta_t:total_t;
+     [R,S,iter(num_iter),a]=enrichment2D(K1,M1,M2,C,V,S0,R0,F,G,CC,TOL,num_iter);
+     F(:,num_iter)=R;  
+     G(:,num_iter)=S;
+    Error_iter = 1.0; 
+    Error_iter = Error_iter.*norm(F(:,num_iter)*norm(G(:,num_iter))); 
+    Aprt = max(Aprt,sqrt(Error_iter));
+    Error_iter = sqrt(Error_iter)/Aprt;
+ end
+ 
